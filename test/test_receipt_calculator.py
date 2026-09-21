@@ -4,6 +4,8 @@ These fixtures model successful outputs from the future vision/LLM extraction
 stage. No model/API call belongs in this test.
 """
 
+from decimal import Decimal
+
 from lib.receipt_calculator import ReceiptCalculator
 
 
@@ -77,5 +79,5 @@ def test_calculates_both_queries_across_receipts_1_and_2():
 
     result = calculator.calculate(receipts)
 
-    assert result["amount_paid"] == 710.80
-    assert result["amount_without_discounts"] == 872.40
+    assert result["amount_paid"] == Decimal("710.80")
+    assert result["amount_without_discounts"] == Decimal("872.40")

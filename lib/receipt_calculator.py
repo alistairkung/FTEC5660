@@ -6,6 +6,7 @@ contract. This module deliberately contains no model or LangChain code.
 
 from __future__ import annotations
 
+from decimal import Decimal
 from typing import Any
 
 
@@ -21,4 +22,18 @@ class ReceiptCalculator:
 
         Implement this during the red -> green step.
         """
-        raise NotImplementedError
+        gross_subtotal = Decimal("0.00")
+        total_amount_paid = Decimal("0.00")
+
+        for receipt in receipts:
+            for item in receipt["items"]:
+                gross_subtotal += Decimal(str(item["original_line_amount"]))
+
+            total_amount_paid += Decimal(str(receipt["amount_paid_after_rounding"]))
+
+        return {
+            "amount_paid": total_amount_paid,
+            "amount_without_discounts": gross_subtotal
+        }
+        
+
