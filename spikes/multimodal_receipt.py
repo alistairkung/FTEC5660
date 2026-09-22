@@ -1,9 +1,10 @@
 from pathlib import Path
 
 from hw1 import image_data_url, load_env_file
+from lib.receipt_extractor import build_receipt_extraction_chain
 from langchain_deepseek import ChatDeepSeek
-from langchain_core.messages import HumanMessage
 import os
+
 
 def extract_receipt():
     load_env_file()
@@ -13,27 +14,25 @@ def extract_receipt():
     llm = ChatDeepSeek(
         model="deepseek-v4-flash-vision-exp",
         api_key=api_key,
-        temperature=0,
-        max_tokens=500,
+        max_tokens=6000,
         timeout=30,
         max_retries=2,
+        extra_body={"thinking": {"type": "disabled"}},
     )
 
     image_path = Path("public_test/receipt1.jpg")
-    image_url = image_data_url(image_path)
 
-    message = HumanMessage(
-        content=[
-            {"type": "text", "text": "Describe this receipt briefly."},
-            {
-                "type": "image_url",
-                "image_url": {"url": image_url}
-            }
-        ]
-    )
+    chain = build_receipt_extraction_chain(llm)
 
-    response = llm.invoke([message])
-    print(response.content)
+    result = chain.invoke({"image_url": image_data_url(image_path)})
+
+    print(result)
+
+    # response = chain.invoke({"image_url": image_data_url(image_path)})
+
+    # print(response)
+    # print("CONTENT:", repr(response.content))
+
 
 if __name__ == "__main__":
     extract_receipt()

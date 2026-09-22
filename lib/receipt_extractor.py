@@ -1,7 +1,5 @@
-"""Multimodal receipt extraction boundary.
-
-The learner implements build_receipt_extraction_chain during the red -> green step.
-"""
+from langchain_core.prompts import ChatPromptTemplate
+from langchain_core.output_parsers import JsonOutputParser
 
 RECEIPT_EXTRACTION_PROMPT = """
 TASK
@@ -34,37 +32,54 @@ Return only valid JSON. Do not include Markdown, code fences, commentary, or exp
 
 Use exactly these top-level keys and this structure:
 
-{
+{{
     "items": [
-        {
+        {{
             "description": "string",
             "original_line_amount": 0.00
-        }
+        }}
     ],
     "discounts": [
-        {
+        {{
             "description": "string",
             "discount_amount": 0.00
-        }
+        }}
     ],
     "subtotal_after_discounts": 0.00,
     "rounding": 0.00,
     "amount_paid_after_rounding": 0.00
-}
+}}
 
 Any monetary field may be null only when its value cannot be reliably read from the receipt.
 """
 
 
 def build_receipt_extraction_chain(llm):
-    """Build a reusable one-receipt multimodal extraction chain.
+    """A reusable one-receipt multimodal extraction chain.
 
     Runtime contract:
         {"image_url": "data:image/jpeg;base64,..."}
 
     Output contract:
         Parsed Python dict matching RECEIPT_EXTRACTION_PROMPT.
-
-    Implement this during the red -> green step.
     """
-    raise NotImplementedError
+    prompt = ChatPromptTemplate.from_messages(
+        [
+            (
+                "human",
+                [
+                    {
+                        "type": "text",
+                        "text": RECEIPT_EXTRACTION_PROMPT,
+                    },
+                    {
+                        "type": "image_url",
+                        "image_url": {
+                            "url": "{image_url}",
+                        },
+                    },
+                ],
+            )
+        ]
+    )
+    return prompt | llm | JsonOutputParser()

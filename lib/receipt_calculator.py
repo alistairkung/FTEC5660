@@ -13,7 +13,7 @@ from typing import Any
 class ReceiptCalculator:
     """Calculate the two homework answers from already-extracted receipts."""
 
-    def calculate(self, receipts: list[dict[str, Any]]) -> dict[str, float]:
+    def calculate(self, receipts: list[dict[str, Any]]) -> dict[str, Decimal]:
         """Return aggregate paid and pre-discount totals.
 
         Contract:
@@ -33,7 +33,5 @@ class ReceiptCalculator:
 
         return {
             "amount_paid": total_amount_paid,
-            "amount_without_discounts": gross_subtotal
+            "amount_without_discounts": gross_subtotal,
         }
-        
-

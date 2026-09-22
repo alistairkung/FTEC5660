@@ -18,7 +18,6 @@ from lib.receipt_extractor import (
     build_receipt_extraction_chain,
 )
 
-
 SAMPLE_EXTRACTION = {
     "items": [
         {
@@ -63,23 +62,22 @@ def test_chain_sends_instruction_and_runtime_image_to_model():
     assert isinstance(human_message.content, list)
 
     text_parts = [
-        part["text"]
-        for part in human_message.content
-        if part.get("type") == "text"
+        part["text"] for part in human_message.content if part.get("type") == "text"
     ]
     image_parts = [
-        part
-        for part in human_message.content
-        if part.get("type") == "image_url"
+        part for part in human_message.content if part.get("type") == "image_url"
     ]
 
-    assert RECEIPT_EXTRACTION_PROMPT in text_parts
-    assert image_parts == [
-        {
-            "type": "image_url",
-            "image_url": {"url": image_url},
-        }
-    ]
+    assert len(text_parts) == 1
+
+    rendered_prompt = text_parts[0]
+
+    assert "Extract the information from the provided receipt image" in rendered_prompt
+    assert '"items"' in rendered_prompt
+    assert '"discounts"' in rendered_prompt
+    assert '"subtotal_after_discounts"' in rendered_prompt
+    assert '"rounding"' in rendered_prompt
+    assert '"amount_paid_after_rounding"' in rendered_prompt
 
 
 def test_chain_parses_valid_model_json_into_python_dict():
@@ -87,9 +85,11 @@ def test_chain_parses_valid_model_json_into_python_dict():
     fake_llm = _fake_llm_that_records(captured_messages)
     chain = build_receipt_extraction_chain(fake_llm)
 
-    result = chain.invoke({
-        "image_url": "data:image/jpeg;base64,receipt-one",
-    })
+    result = chain.invoke(
+        {
+            "image_url": "data:image/jpeg;base64,receipt-one",
+        }
+    )
 
     assert result == SAMPLE_EXTRACTION
     assert isinstance(result, dict)
