@@ -51,6 +51,45 @@ homework runner.
 
 ## Homework 1 solution
 
+### Chain overview
+
+```mermaid
+flowchart TD
+    A[Receipt image] --> B[image_data_url]
+    B --> C[Multimodal ChatPromptTemplate]
+    C --> D[DeepSeek vision model\nthinking disabled]
+    D --> E[JsonOutputParser]
+    E --> F[ReceiptValidator via RunnableLambda]
+
+    F -->|valid| G[Trusted receipt\nDecimal-normalised]
+    F -->|ValueError| H[Retry extraction + validation\nup to 10 attempts]
+    H -->|valid| G
+    H -->|all retries fail| I[Raw extraction fallback]
+
+    G --> J[Collect receipts]
+    I --> J
+
+    J --> K[ReceiptCalculator]
+    K --> L[Q1: sum final amounts paid]
+    K --> M[Q2: sum original line amounts]
+
+    L --> N[Format exact HKD response]
+    M --> N
+    N --> O[results.csv]
+
+    subgraph Validation checks
+        F1[Required fields / non-null values]
+        F2[Non-negative item + discount amounts]
+        F3[items - discounts = subtotal]
+        F4[subtotal + rounding = final paid]
+    end
+
+    F --> F1
+    F --> F2
+    F --> F3
+    F --> F4
+```
+
 The implementation is intentionally contained in **one submission file,
 `hw1.py`**. Within that file I still keep three conceptual boundaries:
 extraction, validation, and deterministic calculation.
