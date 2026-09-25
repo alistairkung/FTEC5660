@@ -35,22 +35,47 @@ def extract_receipt():
         print(f"\nProcessing {image_path.name}")
 
         image_url = image_data_url(image_path)
-        receipt = chain.invoke({"image_url": image_url})
 
         try:
-            validated = validator.validate(receipt)
+            validated = extract_valid_receipt(
+                image_url,
+                chain,
+                validator,
+            )
             validated_receipts.append(validated)
-            print("✓ valid")
+            print("valid")
 
-        except ValueError as e:
-            print(f"✗ validation failed: {e}")
-            print(receipt)
+        except ValueError as error:
+            print(f"error: {error}")
 
-    print(f"\nValidated {len(validated_receipts)} " f"of {len(image_paths)} receipts")
+        print(
+            f"\nValidated {len(validated_receipts)} " f"of {len(image_paths)} receipts"
+        )
 
     answers = calculator.calculate(validated_receipts)
 
     print(answers)
+
+
+def extract_valid_receipt(
+    image_url,
+    chain,
+    validator,
+    max_attempts=3,
+):
+    last_error = None
+
+    for attempt in range(max_attempts):
+        receipt = chain.invoke({"image_url": image_url})
+
+        try:
+            return validator.validate(receipt)
+        except ValueError as error:
+            last_error = error
+
+    raise ValueError(
+        f"Receipt failed validation after {max_attempts} attempts"
+    ) from last_error
 
 
 if __name__ == "__main__":

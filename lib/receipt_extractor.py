@@ -13,7 +13,17 @@ One receipt image.
 SEMANTIC CONSTRAINTS
 
 - original_line_amount is the positive pre-discount amount for a purchased item line.
-- If a quantity is shown and the receipt provides an extended line total, use the extended line total rather than recalculating unit price × quantity.
+
+QUANTITY RULE
+
+When an item quantity is greater than 1:
+
+- original_line_amount must be the total pre-discount amount for the entire purchased quantity.
+- Do not return the per-unit price.
+- Do not divide a displayed line total by the quantity.
+- If both a unit price and an extended line total are visible,
+  use the extended line total.
+
 - discount_amount is the positive magnitude of a discount, even if the receipt displays the discount as a negative value.
 - Discounts may apply to an individual item or to the receipt as a whole. Do not invent an item association when none is shown.
 - subtotal_after_discounts is the subtotal after discounts have been applied but before rounding.
@@ -25,6 +35,8 @@ SEMANTIC CONSTRAINTS
 - If an item or discount amount is readable but its description is not, use "description unknown".
 - Monetary values must be numbers, not strings.
 - Return discount magnitudes as positive numbers. Preserve the sign only for rounding.
+
+
 
 OUTPUT
 
