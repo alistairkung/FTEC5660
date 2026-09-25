@@ -1,12 +1,9 @@
-"""Tests for the receipt validation / money-normalisation boundary."""
-
 from copy import deepcopy
 from decimal import Decimal
 
 import pytest
 
 from lib.receipt_validator import ReceiptValidator
-
 
 VALID_RECEIPT = {
     "items": [
