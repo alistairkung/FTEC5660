@@ -13,10 +13,7 @@ import json
 from langchain_core.messages import AIMessage
 from langchain_core.runnables import RunnableLambda
 
-from lib.receipt_extractor import (
-    RECEIPT_EXTRACTION_PROMPT,
-    build_receipt_extraction_chain,
-)
+from hw1 import RECEIPT_EXTRACTION_PROMPT, build_receipt_extraction_chain
 
 SAMPLE_EXTRACTION = {
     "items": [
