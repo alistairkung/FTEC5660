@@ -1,9 +1,12 @@
 from pathlib import Path
 
 from hw1 import image_data_url, load_env_file
+from lib.receipt_calculator import ReceiptCalculator
 from lib.receipt_extractor import build_receipt_extraction_chain
 from langchain_deepseek import ChatDeepSeek
 import os
+
+from lib.receipt_validator import ReceiptValidator
 
 
 def extract_receipt():
@@ -20,18 +23,34 @@ def extract_receipt():
         extra_body={"thinking": {"type": "disabled"}},
     )
 
-    image_path = Path("public_test/receipt1.jpg")
+    image_paths = sorted(Path("public_test").glob("*.jpg"))
+
+    validated_receipts = []
 
     chain = build_receipt_extraction_chain(llm)
+    validator = ReceiptValidator()
+    calculator = ReceiptCalculator()
 
-    result = chain.invoke({"image_url": image_data_url(image_path)})
+    for image_path in image_paths:
+        print(f"\nProcessing {image_path.name}")
 
-    print(result)
+        image_url = image_data_url(image_path)
+        receipt = chain.invoke({"image_url": image_url})
 
-    # response = chain.invoke({"image_url": image_data_url(image_path)})
+        try:
+            validated = validator.validate(receipt)
+            validated_receipts.append(validated)
+            print("✓ valid")
 
-    # print(response)
-    # print("CONTENT:", repr(response.content))
+        except ValueError as e:
+            print(f"✗ validation failed: {e}")
+            print(receipt)
+
+    print(f"\nValidated {len(validated_receipts)} " f"of {len(image_paths)} receipts")
+
+    answers = calculator.calculate(validated_receipts)
+
+    print(answers)
 
 
 if __name__ == "__main__":
