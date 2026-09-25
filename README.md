@@ -13,11 +13,15 @@ and percentage discount, but do not add back rounding.
 
 ## Student task
 
-Only edit the two functions in `hw1.py` that contain `### YOUR CODE HERE`:
+The starter exposes two main entry points in `hw1.py`:
 
-- `build_chain()` creates your LangChain chain.
+- `build_chain()` creates the LangChain pipeline.
 - `answer_queries()` runs the chain on the receipt images and returns one final
   response for each question.
+
+The submitted solution keeps its supporting extraction, validation, and
+calculation code in the same `hw1.py` file to satisfy the single-file
+submission requirement.
 
 You may use prompt chaining, routing, parallel calls, reflection, or a
 combination. Your final responses should each contain one HKD amount. Do not
