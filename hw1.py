@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import os
 import argparse
+from copy import deepcopy
 import base64
 import csv
 import json
@@ -15,10 +16,9 @@ from pathlib import Path
 from typing import Any
 
 from langchain_deepseek import ChatDeepSeek
+from langchain_core.output_parsers import JsonOutputParser
+from langchain_core.prompts import ChatPromptTemplate
 from langchain_core.runnables import RunnableLambda
-from lib.receipt_calculator import ReceiptCalculator
-from lib.receipt_extractor import build_receipt_extraction_chain
-from lib.receipt_validator import ReceiptValidator
 
 QUERY_1 = "How much money did I spend in total for these bills?"
 QUERY_2 = "How much would I have had to pay without the discount?"
@@ -56,6 +56,274 @@ def image_data_url(path: Path) -> str:
     mime_type = mime_type or "image/jpeg"
     encoded = base64.b64encode(path.read_bytes()).decode("ascii")
     return f"data:{mime_type};base64,{encoded}"
+
+
+# Student solution components are kept in this file to match the submission requirement.
+
+RECEIPT_EXTRACTION_PROMPT = """
+TASK
+
+Extract the information from the provided receipt image into the specified JSON structure.
+
+INPUT
+
+One receipt image.
+
+SEMANTIC CONSTRAINTS
+
+- original_line_amount is the positive pre-discount amount for a purchased item line.
+
+QUANTITY RULE
+
+When an item quantity is greater than 1:
+
+- original_line_amount must be the total pre-discount amount for the entire purchased quantity.
+- Do not return the per-unit price.
+- Do not divide a displayed line total by the quantity.
+- If both a unit price and an extended line total are visible,
+  use the extended line total.
+
+- discount_amount is the positive magnitude of a discount, even if the receipt displays the discount as a negative value.
+- Discounts may apply to an individual item or to the receipt as a whole. Do not invent an item association when none is shown.
+- subtotal_after_discounts is the subtotal after discounts have been applied but before rounding.
+- rounding is the signed rounding adjustment shown on the receipt. Preserve whether it increases or decreases the total.
+- amount_paid_after_rounding is the final amount actually charged after rounding.
+- Do not treat wallet balances, remaining stored-value balances, payment-card balances, previous balances, top-ups, or similar payment metadata as purchased items.
+- Do not invent information that cannot be read from the receipt.
+- If a required monetary value cannot be read, use null.
+- If an item or discount amount is readable but its description is not, use "description unknown".
+- Monetary values must be numbers, not strings.
+- Return discount magnitudes as positive numbers. Preserve the sign only for rounding.
+
+
+
+OUTPUT
+
+Return only valid JSON. Do not include Markdown, code fences, commentary, or explanatory text.
+
+Use exactly these top-level keys and this structure:
+
+{{
+    "items": [
+        {{
+            "description": "string",
+            "original_line_amount": 0.00
+        }}
+    ],
+    "discounts": [
+        {{
+            "description": "string",
+            "discount_amount": 0.00
+        }}
+    ],
+    "subtotal_after_discounts": 0.00,
+    "rounding": 0.00,
+    "amount_paid_after_rounding": 0.00
+}}
+
+Any monetary field may be null only when its value cannot be reliably read from the receipt.
+"""
+
+
+def build_receipt_extraction_chain(llm):
+    """A reusable one-receipt multimodal extraction chain.
+
+    Runtime contract:
+        {"image_url": "data:image/jpeg;base64,..."}
+
+    Output contract:
+        Parsed Python dict matching RECEIPT_EXTRACTION_PROMPT.
+    """
+    prompt = ChatPromptTemplate.from_messages(
+        [
+            (
+                "human",
+                [
+                    {
+                        "type": "text",
+                        "text": RECEIPT_EXTRACTION_PROMPT,
+                    },
+                    {
+                        "type": "image_url",
+                        "image_url": {
+                            "url": "{image_url}",
+                        },
+                    },
+                ],
+            )
+        ]
+    )
+    return prompt | llm | JsonOutputParser()
+
+
+class ReceiptValidator:
+    """Validate an untrusted extracted receipt and return a trusted equivalent.
+
+    Intended responsibilities:
+    - required receipt/item/discount fields exist;
+    - required monetary values are present;
+    - monetary values are normalised to Decimal;
+    - signs satisfy the receipt-domain contract;
+    - extracted totals reconcile.
+
+    Invalid model output should fail explicitly rather than being silently repaired.
+    """
+
+    AGGREGATE_AMOUNT_FIELDS = [
+        "subtotal_after_discounts",
+        "rounding",
+        "amount_paid_after_rounding",
+    ]
+
+    REQUIRED_FIELDS = [
+        "items",
+        "discounts",
+        "subtotal_after_discounts",
+        "rounding",
+        "amount_paid_after_rounding",
+    ]
+
+    REQUIRED_ITEM_KEYS = ["description", "original_line_amount"]
+
+    REQUIRED_DISCOUNT_KEYS = ["description", "discount_amount"]
+
+    def validate(self, receipt: dict[str, Any]) -> dict[str, Any]:
+        self._validate_required(receipt)
+        self._validate_present(receipt)
+
+        normalised = self._normalise_amounts(receipt)
+
+        self._validate_item_amounts_are_non_negative(normalised)
+        self._validate_discount_amounts_are_non_negative(normalised)
+        self._validate_subtotal_final(normalised)
+        self._validate_extracted_sum_equals_totals(normalised)
+
+        return normalised
+
+    def _validate_required(self, receipt: dict[str, Any]) -> None:
+        if not all(key in receipt for key in self.REQUIRED_FIELDS):
+            raise ValueError("Missing required receipt field")
+
+        if not all(
+            all(key in item for key in self.REQUIRED_ITEM_KEYS)
+            for item in receipt["items"]
+        ):
+            raise ValueError("Missing required item field")
+
+        if not all(
+            all(key in discount for key in self.REQUIRED_DISCOUNT_KEYS)
+            for discount in receipt["discounts"]
+        ):
+            raise ValueError("Missing required discount field")
+
+    def _validate_present(self, receipt: dict[str, Any]) -> None:
+        if not all(receipt[key] is not None for key in self.AGGREGATE_AMOUNT_FIELDS):
+            raise ValueError("Required monetary field is null")
+
+        if not all(
+            all(item[key] is not None for key in self.REQUIRED_ITEM_KEYS)
+            for item in receipt["items"]
+        ):
+            raise ValueError("Required item field is null")
+
+        if not all(
+            all(discount[key] is not None for key in self.REQUIRED_DISCOUNT_KEYS)
+            for discount in receipt["discounts"]
+        ):
+            raise ValueError("Required discount field is null")
+
+    def _normalise_amounts(self, receipt: dict[str, Any]) -> dict[str, Any]:
+        r = deepcopy(receipt)
+
+        r["items"] = [
+            {
+                **item,
+                "original_line_amount": Decimal(str(item["original_line_amount"])),
+            }
+            for item in r["items"]
+        ]
+
+        r["discounts"] = [
+            {
+                **discount,
+                "discount_amount": Decimal(str(discount["discount_amount"])),
+            }
+            for discount in r["discounts"]
+        ]
+
+        r["subtotal_after_discounts"] = Decimal(str(r["subtotal_after_discounts"]))
+
+        r["rounding"] = Decimal(str(r["rounding"]))
+
+        r["amount_paid_after_rounding"] = Decimal(str(r["amount_paid_after_rounding"]))
+
+        return r
+
+    def _validate_item_amounts_are_non_negative(self, receipt: dict[str, Any]) -> None:
+        if not all(item["original_line_amount"] >= 0 for item in receipt["items"]):
+            raise ValueError("Item amounts cannot be negative")
+
+    def _validate_discount_amounts_are_non_negative(
+        self, receipt: dict[str, Any]
+    ) -> None:
+        if not all(
+            discount["discount_amount"] >= 0 for discount in receipt["discounts"]
+        ):
+            raise ValueError("Discount amounts cannot be negative")
+
+    def _validate_subtotal_final(self, receipt: dict[str, Any]) -> None:
+        if receipt["subtotal_after_discounts"] < 0:
+            raise ValueError("Subtotal cannot be negative")
+
+        if receipt["amount_paid_after_rounding"] < 0:
+            raise ValueError("Final amount paid cannot be negative")
+
+    def _validate_extracted_sum_equals_totals(self, receipt: dict[str, Any]) -> None:
+        item_total = sum(item["original_line_amount"] for item in receipt["items"])
+
+        discount_total = sum(
+            discount["discount_amount"] for discount in receipt["discounts"]
+        )
+
+        expected_subtotal = item_total - discount_total
+
+        if expected_subtotal != receipt["subtotal_after_discounts"]:
+            raise ValueError(
+                "Extracted items and discounts do not reconcile to subtotal"
+            )
+
+        expected_final = receipt["subtotal_after_discounts"] + receipt["rounding"]
+
+        if expected_final != receipt["amount_paid_after_rounding"]:
+            raise ValueError("Subtotal and rounding do not reconcile to final amount")
+
+
+class ReceiptCalculator:
+    """Calculate the two homework answers from already-extracted receipts."""
+
+    def calculate(self, receipts: list[dict[str, Any]]) -> dict[str, Decimal]:
+        """Return aggregate paid and pre-discount totals.
+
+        Contract:
+        - Q1 uses each receipt's authoritative amount_paid_after_rounding.
+        - Q2 uses the sum of each item's original_line_amount.
+
+        Implement this during the red -> green step.
+        """
+        gross_subtotal = Decimal("0.00")
+        total_amount_paid = Decimal("0.00")
+
+        for receipt in receipts:
+            for item in receipt["items"]:
+                gross_subtotal += Decimal(str(item["original_line_amount"]))
+
+            total_amount_paid += Decimal(str(receipt["amount_paid_after_rounding"]))
+
+        return {
+            "amount_paid": total_amount_paid,
+            "amount_without_discounts": gross_subtotal,
+        }
+
 
 
 def build_chain() -> Any:
