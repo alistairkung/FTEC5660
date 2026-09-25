@@ -1,12 +1,14 @@
 from pathlib import Path
 
-from hw1 import image_data_url, load_env_file
-from lib.receipt_calculator import ReceiptCalculator
-from lib.receipt_extractor import build_receipt_extraction_chain
+from hw1 import (
+    ReceiptCalculator,
+    ReceiptValidator,
+    build_receipt_extraction_chain,
+    image_data_url,
+    load_env_file,
+)
 from langchain_deepseek import ChatDeepSeek
 import os
-
-from lib.receipt_validator import ReceiptValidator
 
 
 def extract_receipt():
