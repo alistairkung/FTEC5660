@@ -104,7 +104,6 @@ def test_null_required_monetary_value_fails(path, value):
 @pytest.mark.parametrize(
     ("path", "invalid_value"),
     [
-        (("items", 0, "original_line_amount"), 0),
         (("items", 0, "original_line_amount"), -1),
         (("discounts", 0, "discount_amount"), -1),
         (("subtotal_after_discounts",), -1),
@@ -121,6 +120,36 @@ def test_invalid_money_sign_fails(path, invalid_value):
 
     with pytest.raises(ValueError):
         ReceiptValidator().validate(receipt)
+
+
+def test_zero_item_amount_is_allowed():
+    receipt = deepcopy(VALID_RECEIPT)
+
+    receipt["items"].append(
+        {
+            "description": "Coupon marker",
+            "original_line_amount": 0,
+        }
+    )
+
+    result = ReceiptValidator().validate(receipt)
+
+    assert result["items"][-1]["original_line_amount"] == Decimal("0")
+
+
+def test_zero_discount_amount_is_allowed():
+    receipt = deepcopy(VALID_RECEIPT)
+
+    receipt["discounts"].append(
+        {
+            "description": "Promotion marker",
+            "discount_amount": 0,
+        }
+    )
+
+    result = ReceiptValidator().validate(receipt)
+
+    assert result["discounts"][-1]["discount_amount"] == Decimal("0")
 
 
 def test_items_minus_discounts_must_reconcile_to_subtotal():
