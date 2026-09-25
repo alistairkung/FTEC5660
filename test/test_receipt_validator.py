@@ -3,7 +3,7 @@ from decimal import Decimal
 
 import pytest
 
-from lib.receipt_validator import ReceiptValidator
+from hw1 import ReceiptValidator
 
 VALID_RECEIPT = {
     "items": [
