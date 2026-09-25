@@ -6,7 +6,7 @@ stage. No model/API call belongs in this test.
 
 from decimal import Decimal
 
-from lib.receipt_calculator import ReceiptCalculator
+from hw1 import ReceiptCalculator
 
 
 def test_calculates_both_queries_across_receipts_1_and_2():
